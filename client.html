@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GhostProxy</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06060a;--bg2:#0d0d16;--sf:#11111c;--sf2:#181826;
+  --b1:#1e1e2f;--b2:#2a2a3e;
+  --mint:#3dffa0;--mintd:rgba(61,255,160,.12);
+  --lav:#9b8dff;--lavd:rgba(155,141,255,.12);
+  --tx:#e8e8f0;--tx2:#8888a8;--tx3:#4a4a6a;
+  --red:#ff5566;--amber:#ffaa44;
+}
+html,body{height:100%;background:var(--bg);color:var(--tx);font-family:'Instrument Sans',sans-serif;overflow:hidden}
+
+/* ── Background ──────────────────────────────────────────────────── */
+.bg-mesh{position:fixed;inset:0;z-index:0;pointer-events:none}
+.bg-mesh::before{content:'';position:absolute;inset:-40%;
+  background:radial-gradient(ellipse 55% 45% at 20% 30%,rgba(61,255,160,.065) 0%,transparent 55%),
+    radial-gradient(ellipse 45% 55% at 80% 70%,rgba(155,141,255,.065) 0%,transparent 55%);
+  animation:drift 16s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translate(0,0) rotate(0)}to{transform:translate(1.5%,2.5%) rotate(2deg)}}
+.bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(61,255,160,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(61,255,160,.022) 1px,transparent 1px);
+  background-size:48px 48px;
+  -webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black,transparent);
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black,transparent)}
+
+/* ── Landing ─────────────────────────────────────────────────────── */
+#landing{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:24px;gap:32px;
+  transition:opacity .35s ease,transform .35s ease}
+#landing.gone{opacity:0;pointer-events:none;transform:scale(.97)}
+
+.logo-area{text-align:center;animation:up .55s ease both}
+.badge{display:inline-flex;align-items:center;gap:8px;background:var(--mintd);
+  border:1px solid rgba(61,255,160,.22);border-radius:100px;padding:5px 14px 5px 10px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--mint);
+  letter-spacing:.08em;margin-bottom:18px}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--mint);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+.logo-title{font-family:'Syne',sans-serif;font-size:clamp(42px,7.5vw,70px);font-weight:800;
+  letter-spacing:-.025em;line-height:1;
+  background:linear-gradient(135deg,#fff 0%,var(--mint) 50%,var(--lav) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.logo-sub{margin-top:10px;font-size:14px;color:var(--tx2)}
+
+.proxy-card{width:100%;max-width:660px;background:var(--sf);border:1px solid var(--b2);
+  border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:15px;
+  box-shadow:0 10px 50px rgba(0,0,0,.55);animation:up .55s .08s ease both}
+.url-row{display:flex;gap:9px}
+.url-box{flex:1;display:flex;align-items:center;gap:9px;background:var(--bg2);
+  border:1.5px solid var(--b2);border-radius:10px;padding:12px 15px;
+  transition:border-color .18s,box-shadow .18s}
+.url-box:focus-within{border-color:var(--mint);box-shadow:0 0 0 3px rgba(61,255,160,.1)}
+.url-globe{color:var(--tx3);font-size:15px;flex-shrink:0}
+.url-input{flex:1;background:none;border:none;outline:none;color:var(--tx);
+  font-family:'JetBrains Mono',monospace;font-size:13px}
+.url-input::placeholder{color:var(--tx3)}
+.browse-btn{background:var(--mint);color:#000;border:none;border-radius:10px;
+  padding:13px 26px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;
+  cursor:pointer;flex-shrink:0;letter-spacing:.02em;transition:all .15s}
+.browse-btn:hover{background:#5fffc0;box-shadow:0 4px 22px rgba(61,255,160,.3);transform:translateY(-1px)}
+.browse-btn:active{transform:translateY(0)}
+.browse-btn:disabled{background:var(--b2);color:var(--tx3);cursor:not-allowed;transform:none;box-shadow:none}
+
+.opts-row{display:flex;flex-wrap:wrap;gap:7px}
+.opt-lbl{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.opt-lbl input{display:none}
+.opt-pill{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:100px;
+  border:1.5px solid var(--b2);background:var(--bg2);font-size:11.5px;color:var(--tx2);transition:all .14s}
+.opt-lbl input:checked+.opt-pill{border-color:var(--mint);background:var(--mintd);color:var(--mint)}
+
+.quick-row{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;animation:up .55s .16s ease both}
+.qk{background:var(--sf);border:1px solid var(--b1);border-radius:8px;padding:6px 13px;
+  font-size:12px;color:var(--tx2);cursor:pointer;transition:all .14s;display:flex;align-items:center;gap:5px}
+.qk:hover{border-color:var(--b2);color:var(--tx);background:var(--sf2)}
+
+.features{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;animation:up .55s .24s ease both}
+.feat{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tx3)}
+.feat-icon{width:26px;height:26px;border-radius:7px;background:var(--sf);
+  border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:12px}
+
+@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* ── Browser ─────────────────────────────────────────────────────── */
+#browser{position:fixed;inset:0;display:flex;flex-direction:column;
+  opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:5}
+#browser.show{opacity:1;pointer-events:all}
+
+/* Progress */
+#prog{position:absolute;top:0;left:0;right:0;height:2px;z-index:100;
+  background:linear-gradient(90deg,var(--mint),var(--lav));
+  transform-origin:left;transform:scaleX(0);opacity:0;transition:transform .3s ease,opacity .3s ease}
+
+/* Chrome bar */
+.chrome{background:var(--sf);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;gap:7px;height:50px;padding:0 10px;
+  flex-shrink:0;position:relative;z-index:50}
+.cbtn{width:30px;height:30px;border-radius:7px;background:none;
+  border:1px solid transparent;color:var(--tx2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+  flex-shrink:0;transition:all .12s}
+.cbtn:hover:not(:disabled){background:var(--sf2);border-color:var(--b2);color:var(--tx)}
+.cbtn:disabled{opacity:.28;cursor:not-allowed}
+.cbtn.lit{background:var(--mintd);border-color:rgba(61,255,160,.3);color:var(--mint)}
+
+.addr{flex:1;display:flex;align-items:center;gap:8px;background:var(--bg2);
+  border:1.5px solid var(--b2);border-radius:8px;padding:6px 11px;min-width:0;
+  transition:border-color .18s,box-shadow .18s;cursor:text}
+.addr:focus-within{border-color:var(--mint);box-shadow:0 0 0 2px rgba(61,255,160,.1)}
+.addr-sec{font-size:12px;flex-shrink:0}
+.addr-input{flex:1;min-width:0;background:none;border:none;outline:none;
+  color:var(--tx);font-family:'JetBrains Mono',monospace;font-size:12px}
+.addr-input::placeholder{color:var(--tx3)}
+.addr-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--b2);
+  border-top-color:var(--mint);animation:spin .65s linear infinite;flex-shrink:0;display:none}
+.addr-spin.on{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--b2);
+  flex-shrink:0;transition:background .3s}
+.status-dot.ok{background:var(--mint)}
+.status-dot.err{background:var(--red)}
+
+/* Options panel */
+.opts-panel{background:var(--sf);border-bottom:1px solid var(--b1);
+  overflow:hidden;max-height:0;transition:max-height .22s ease,padding .22s ease;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.opts-panel.open{max-height:52px;padding:9px 14px}
+.opts-panel .opt-pill{padding:4px 10px;font-size:11px}
+.panel-lbl{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;
+  letter-spacing:.07em;flex-shrink:0;white-space:nowrap}
+
+/* Stats bar */
+.stats-bar{background:var(--bg2);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;gap:14px;padding:3px 14px;
+  flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:10px;
+  max-height:0;overflow:hidden;transition:max-height .2s}
+.stats-bar.show{max-height:26px}
+.stat{color:var(--tx3);display:flex;align-items:center;gap:4px}
+.stat b{color:var(--tx2);font-weight:500}
+.stat.g{color:var(--mint)}
+.stat.r{color:var(--red)}
+.page-title{flex:1;color:var(--tx3);font-size:10px;font-family:'Instrument Sans',sans-serif;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Viewport */
+.viewport{flex:1;position:relative;overflow:hidden;background:#fff}
+
+iframe#viewer{
+  width:100%;height:100%;border:none;display:none;background:#fff;
+  /* allow-same-origin is SAFE here because iframe loads blob: URLs (null origin).
+     It's required to let the injected script patch Location.prototype properly. */
+}
+
+/* Empty state */
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;background:var(--bg);z-index:2}
+.empty-icon{font-size:44px;opacity:.2}
+.empty-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--tx2)}
+.empty-sub{font-size:12px;color:var(--tx3);text-align:center;max-width:300px;line-height:1.7}
+
+/* Error state */
+.err-state{position:absolute;inset:0;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;background:var(--bg);z-index:3;padding:20px}
+.err-state.show{display:flex}
+.err-card{background:rgba(255,85,102,.07);border:1px solid rgba(255,85,102,.22);
+  border-radius:14px;padding:20px;max-width:480px;width:100%;display:flex;flex-direction:column;gap:8px}
+.err-title{font-size:14px;color:var(--red);font-weight:600}
+.err-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tx2);line-height:1.65;word-break:break-all}
+.err-retry{background:var(--mint);color:#000;border:none;border-radius:8px;
+  padding:10px 24px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer}
+.err-retry:hover{background:#5fffc0}
+
+/* Loading overlay */
+#load-veil{position:absolute;inset:0;background:rgba(6,6,10,.88);
+  backdrop-filter:blur(5px);display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;z-index:25}
+#load-veil.on{display:flex}
+.load-ring{width:38px;height:38px;border-radius:50%;border:2px solid rgba(61,255,160,.15);
+  border-top-color:var(--mint);animation:spin .7s linear infinite}
+.load-lbl{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mint);letter-spacing:.1em}
+.load-url{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--tx3);
+  max-width:280px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Net panel */
+#net-panel{position:fixed;top:50px;right:0;bottom:0;width:270px;
+  background:var(--sf);border-left:1px solid var(--b1);
+  transform:translateX(100%);transition:transform .22s ease;
+  display:flex;flex-direction:column;z-index:40}
+#net-panel.open{transform:translateX(0)}
+.net-head{padding:9px 12px;border-bottom:1px solid var(--b1);display:flex;
+  align-items:center;justify-content:space-between;flex-shrink:0}
+.net-head-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.04em}
+.net-close{background:none;border:none;color:var(--tx3);cursor:pointer;font-size:18px;line-height:1;padding:0 2px}
+.net-close:hover{color:var(--tx)}
+.net-list{flex:1;overflow-y:auto;padding:5px;display:flex;flex-direction:column;gap:2px}
+.net-list::-webkit-scrollbar{width:3px}
+.net-list::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+.net-row{padding:6px 8px;border-radius:6px;border:1px solid transparent;animation:rslide .12s ease}
+@keyframes rslide{from{opacity:0;transform:translateX(5px)}to{opacity:1;transform:none}}
+.net-row.html{border-color:rgba(61,255,160,.12);background:rgba(61,255,160,.04)}
+.net-row.api{border-color:rgba(255,170,68,.14);background:rgba(255,170,68,.04)}
+.net-row.err{border-color:rgba(255,85,102,.14);background:rgba(255,85,102,.04)}
+.net-row.res{border-color:rgba(155,141,255,.12);background:rgba(155,141,255,.04)}
+.net-row.blk{border-color:rgba(255,85,102,.07);background:rgba(0,0,0,.2);opacity:.5}
+.net-badge{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.net-row.html .net-badge{color:var(--mint)}
+.net-row.api  .net-badge{color:var(--amber)}
+.net-row.err  .net-badge{color:var(--red)}
+.net-row.res  .net-badge{color:var(--lav)}
+.net-row.blk  .net-badge{color:var(--red)}
+.net-url{font-size:9px;color:var(--tx2);word-break:break-all;line-height:1.4;font-family:'JetBrains Mono',monospace}
+.net-meta{font-size:8px;color:var(--tx3);margin-top:2px}
+
+/* WS badge */
+#ws-badge{position:fixed;bottom:14px;right:14px;z-index:9998;
+  background:var(--sf);border:1px solid var(--b1);border-radius:100px;
+  padding:5px 11px;font-family:'JetBrains Mono',monospace;font-size:9px;
+  color:var(--tx3);display:flex;align-items:center;gap:6px;transition:all .25s}
+#ws-badge.ok{border-color:rgba(61,255,160,.28);color:var(--mint)}
+#ws-badge.err{border-color:rgba(255,85,102,.28);color:var(--red)}
+
+/* Toast */
+#toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+  z-index:9999;display:flex;flex-direction:column;gap:7px;align-items:center;pointer-events:none}
+.toast{background:var(--sf2);border:1px solid var(--b2);border-radius:9px;
+  padding:9px 16px;font-size:12px;color:var(--tx);box-shadow:0 6px 30px rgba(0,0,0,.6);
+  display:flex;align-items:center;gap:7px;
+  animation:tin .18s ease, tout .18s ease 2.4s both}
+@keyframes tin{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes tout{from{opacity:1}to{opacity:0;pointer-events:none}}
+
+/* Conn blocker */
+#blocker{position:fixed;inset:0;background:rgba(6,6,10,.94);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  backdrop-filter:blur(8px)}
+#blocker.gone{display:none}
+.bl-ring{width:34px;height:34px;border-radius:50%;border:2px solid var(--b2);
+  border-top-color:var(--mint);animation:spin .7s linear infinite}
+.bl-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
+.bl-sub{font-size:11px;color:var(--tx3);font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+
+<div id="blocker">
+  <div class="bl-ring"></div>
+  <div class="bl-title">Connecting...</div>
+  <div class="bl-sub" id="bl-url">ws://localhost:8080</div>
+</div>
+
+<div class="bg-mesh"></div>
+<div class="bg-grid"></div>
+
+<!-- ═══ LANDING ═══════════════════════════════════════════════════════════ -->
+<div id="landing">
+  <div class="logo-area">
+    <div class="badge"><span class="badge-dot"></span>Free &amp; Anonymous Web Proxy</div>
+    <div class="logo-title">GhostProxy</div>
+    <div class="logo-sub">Browse freely. Stay private. Zero install.</div>
+  </div>
+
+  <div class="proxy-card">
+    <div class="url-row">
+      <div class="url-box">
+        <span class="url-globe">🌐</span>
+        <input class="url-input" id="landUrl" type="text" autocomplete="off" spellcheck="false"
+          placeholder="Enter a URL  —  e.g. https://wikipedia.org" />
+      </div>
+      <button class="browse-btn" id="browseBtn" onclick="landGo()" disabled>Browse</button>
+    </div>
+    <div class="opts-row" id="landOpts">
+      <label class="opt-lbl"><input type="checkbox" id="l-s"><span class="opt-pill">🚫 Remove Scripts</span></label>
+      <label class="opt-lbl"><input type="checkbox" id="l-c"><span class="opt-pill">🍪 Block Cookies</span></label>
+      <label class="opt-lbl"><input type="checkbox" id="l-a"><span class="opt-pill">📵 Block Ads</span></label>
+      <label class="opt-lbl"><input type="checkbox" id="l-h"><span class="opt-pill">🔒 Force HTTPS</span></label>
+      <label class="opt-lbl"><input type="checkbox" id="l-i"><span class="opt-pill">🖼️ No Images</span></label>
+    </div>
+  </div>
+
+  <div class="quick-row">
+    <div class="qk" onclick="quickGo('https://en.wikipedia.org')">📚 Wikipedia</div>
+    <div class="qk" onclick="quickGo('https://old.reddit.com')">🤖 Reddit</div>
+    <div class="qk" onclick="quickGo('https://news.ycombinator.com')">🔶 Hacker News</div>
+    <div class="qk" onclick="quickGo('https://github.com')">🐙 GitHub</div>
+    <div class="qk" onclick="quickGo('https://duckduckgo.com')">🦆 DuckDuckGo</div>
+    <div class="qk" onclick="quickGo('https://lite.cnn.com')">📰 CNN Lite</div>
+  </div>
+
+  <div class="features">
+    <div class="feat"><div class="feat-icon">🔒</div>No Logs</div>
+    <div class="feat"><div class="feat-icon">⚡</div>Fast WS Tunnel</div>
+    <div class="feat"><div class="feat-icon">🛡️</div>Ad Blocking</div>
+    <div class="feat"><div class="feat-icon">🌍</div>Any Website</div>
+    <div class="feat"><div class="feat-icon">↩️</div>Back / Forward</div>
+  </div>
+</div>
+
+<!-- ═══ BROWSER ════════════════════════════════════════════════════════════ -->
+<div id="browser">
+  <div id="prog"></div>
+
+  <div class="chrome">
+    <button class="cbtn" id="backBtn" onclick="goBack()"    disabled title="Back (Alt+←)">←</button>
+    <button class="cbtn" id="fwdBtn"  onclick="goFwd()"     disabled title="Forward (Alt+→)">→</button>
+    <button class="cbtn" id="relBtn"  onclick="reload()"    title="Reload">↺</button>
+    <button class="cbtn"              onclick="goHome()"     title="Home">⌂</button>
+
+    <div class="addr">
+      <span class="addr-sec" id="addrSec">🔒</span>
+      <input class="addr-input" id="addrIn" type="text" autocomplete="off" spellcheck="false" placeholder="Enter URL..." />
+      <div class="addr-spin" id="addrSpin"></div>
+    </div>
+
+    <button class="cbtn" id="optsBtn" onclick="toggleOpts()"   title="Options">⚙</button>
+    <button class="cbtn" id="netBtn"  onclick="toggleNet()"    title="Network log">📡</button>
+    <div class="status-dot" id="statusDot"></div>
+  </div>
+
+  <div class="opts-panel" id="optsPanel">
+    <span class="panel-lbl">PROXY OPTIONS:</span>
+    <label class="opt-lbl"><input type="checkbox" id="b-s" onchange="setOpt('removeScripts',this.checked)"><span class="opt-pill">🚫 Scripts</span></label>
+    <label class="opt-lbl"><input type="checkbox" id="b-c" onchange="setOpt('blockCookies',this.checked)"><span class="opt-pill">🍪 Cookies</span></label>
+    <label class="opt-lbl"><input type="checkbox" id="b-a" onchange="setOpt('removeAds',this.checked)"><span class="opt-pill">📵 Ads</span></label>
+    <label class="opt-lbl"><input type="checkbox" id="b-h" onchange="setOpt('forceHttps',this.checked)"><span class="opt-pill">🔒 HTTPS</span></label>
+    <label class="opt-lbl"><input type="checkbox" id="b-i" onchange="setOpt('noImages',this.checked)"><span class="opt-pill">🖼️ Images</span></label>
+  </div>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat g"><b id="sPages">0</b> pages</div>
+    <div class="stat">  <b id="sApi">0</b> api</div>
+    <div class="stat">  <b id="sAssets">0</b> assets</div>
+    <div class="stat r" id="sErrWrap" style="display:none"><b id="sErr">0</b> errors</div>
+    <div class="stat">  <b id="sLat">—</b></div>
+    <div class="page-title" id="pageTitle"></div>
+  </div>
+
+  <div class="viewport">
+    <div class="empty" id="emptyState">
+      <div class="empty-icon">👻</div>
+      <div class="empty-title">Nothing loaded</div>
+      <div class="empty-sub">Enter a URL above or go home to pick a site.</div>
+    </div>
+
+    <div id="load-veil">
+      <div class="load-ring"></div>
+      <div class="load-lbl" id="loadLbl">FETCHING...</div>
+      <div class="load-url" id="loadUrl2"></div>
+    </div>
+
+    <div class="err-state" id="errState">
+      <div class="err-card">
+        <div class="err-title" id="errTitle">Error</div>
+        <div class="err-msg" id="errMsg"></div>
+      </div>
+      <button class="err-retry" onclick="reload()">Try Again</button>
+    </div>
+
+    <iframe id="viewer"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-pointer-lock allow-downloads allow-popups">
+    </iframe>
+  </div>
+</div>
+
+<!-- ═══ NETWORK PANEL ══════════════════════════════════════════════════════ -->
+<div id="net-panel">
+  <div class="net-head">
+    <div class="net-head-title">📡 Network</div>
+    <button class="net-close" onclick="toggleNet()">×</button>
+  </div>
+  <div class="net-list" id="netList"><div style="padding:14px;font-size:10px;color:var(--tx3);text-align:center">No requests yet</div></div>
+</div>
+
+<div id="ws-badge"><span id="wsDot">●</span><span id="wsText">OFFLINE</span></div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+const WS_URL = 'ws://localhost:8080';
+
+/* ── State ─────────────────────────────────────────────────────────────── */
+let ws = null, pending = {}, msgId = 0;
+let hist = [], histIdx = -1, activeUrl = null;
+let opts = { removeScripts:false, blockCookies:false, removeAds:false, forceHttps:false, noImages:false };
+let counts = { pages:0, api:0, assets:0, err:0 };
+let netOpen = false, optsOpen = false, netFirst = true;
+let _progT = null;
+
+/* ── WebSocket ─────────────────────────────────────────────────────────── */
+function connect() {
+  try { ws = new WebSocket(WS_URL); } catch { schedReconn(); return; }
+  ws.onopen = () => {
+    setBadge('ok', 'CONNECTED');
+    document.getElementById('blocker').classList.add('gone');
+    document.getElementById('browseBtn').disabled = false;
+  };
+  ws.onclose = () => { setBadge('err', 'OFFLINE'); document.getElementById('browseBtn').disabled = true; schedReconn(); };
+  ws.onerror = () => setBadge('err', 'ERROR');
+  ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
+}
+function schedReconn() { setTimeout(connect, 2500); }
+function setBadge(cls, txt) {
+  const b = document.getElementById('ws-badge'); b.className = cls;
+  document.getElementById('wsText').textContent = txt;
+  document.getElementById('statusDot').className = 'status-dot ' + (cls === 'ok' ? 'ok' : 'err');
+}
+function send(data) {
+  return new Promise((res, rej) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) { rej(new Error('Not connected')); return; }
+    const id = ++msgId;
+    pending[id] = { resolve: res, reject: rej, ts: Date.now() };
+    ws.send(JSON.stringify({ id, ...data }));
+  });
+}
+function onMsg(msg) {
+  const p = pending[msg.id];
+  if (p) {
+    document.getElementById('sLat').textContent = (Date.now() - p.ts) + 'ms';
+    delete pending[msg.id];
+    p.resolve(msg);
+  }
+  // Log to network panel
+  if (msg.type === 'html')     { counts.pages++;  netLog('html', 'HTML',    msg.url, msg.status); }
+  else if (msg.type === 'resource' && msg.blocked) { netLog('blk', 'BLOCKED', msg.url, ''); }
+  else if (msg.type === 'resource') {
+    const ct = (msg.contentType||'').split(';')[0].split('/')[1]||'?';
+    const isApi = (msg.contentType||'').includes('json');
+    if (isApi) { counts.api++;    netLog('api', 'API',  msg.url, msg.status); }
+    else       { counts.assets++; netLog('res', ct.toUpperCase().slice(0,6), msg.url, msg.status); }
+  }
+  else if (msg.type === 'error') { counts.err++; netLog('err','ERR', msg.url||'?', msg.message); }
+  document.getElementById('sPages').textContent  = counts.pages;
+  document.getElementById('sApi').textContent    = counts.api;
+  document.getElementById('sAssets').textContent = counts.assets;
+  if (counts.err > 0) {
+    document.getElementById('sErr').textContent = counts.err;
+    document.getElementById('sErrWrap').style.display = 'flex';
+  }
+}
+
+/* ── Network log ───────────────────────────────────────────────────────── */
+function netLog(cls, badge, url, meta) {
+  const list = document.getElementById('netList');
+  if (netFirst) { list.innerHTML = ''; netFirst = false; }
+  const el = document.createElement('div');
+  el.className = 'net-row ' + cls;
+  const short = (url||'').replace(/^https?:\/\//,'').slice(0, 55);
+  el.innerHTML = `<div class="net-badge">${badge}</div><div class="net-url">${short}</div><div class="net-meta">${meta||''}</div>`;
+  list.prepend(el);
+  while (list.children.length > 300) list.removeChild(list.lastChild);
+}
+
+/* ── Options ───────────────────────────────────────────────────────────── */
+function readLandOpts() {
+  opts = {
+    removeScripts: document.getElementById('l-s').checked,
+    blockCookies:  document.getElementById('l-c').checked,
+    removeAds:     document.getElementById('l-a').checked,
+    forceHttps:    document.getElementById('l-h').checked,
+    noImages:      document.getElementById('l-i').checked,
+  };
+}
+function syncOptsToBrowser() {
+  document.getElementById('b-s').checked = opts.removeScripts;
+  document.getElementById('b-c').checked = opts.blockCookies;
+  document.getElementById('b-a').checked = opts.removeAds;
+  document.getElementById('b-h').checked = opts.forceHttps;
+  document.getElementById('b-i').checked = opts.noImages;
+}
+function setOpt(key, val) { opts[key] = val; toast(`${key} ${val ? 'on' : 'off'}`); }
+
+/* ── Navigation ────────────────────────────────────────────────────────── */
+function landGo() {
+  const url = document.getElementById('landUrl').value.trim();
+  if (!url) return;
+  readLandOpts(); syncOptsToBrowser();
+  showBrowser();
+  navTo(url, true);
+}
+function quickGo(url) { readLandOpts(); syncOptsToBrowser(); showBrowser(); navTo(url, true); }
+function showBrowser() {
+  document.getElementById('landing').classList.add('gone');
+  document.getElementById('browser').classList.add('show');
+}
+function goHome() {
+  document.getElementById('browser').classList.remove('show');
+  document.getElementById('landing').classList.remove('gone');
+  document.getElementById('viewer').style.display = 'none';
+  show('emptyState', true); show('errState', false);
+  prog(0);
+}
+function addrGo() { const u = document.getElementById('addrIn').value.trim(); if (u) navTo(u, true); }
+function goBack()  { if (histIdx > 0)              { histIdx--; navTo(hist[histIdx], false); } }
+function goFwd()   { if (histIdx < hist.length - 1){ histIdx++; navTo(hist[histIdx], false); } }
+function reload()  { if (activeUrl) navTo(activeUrl, false); }
+function updateNavBtns() {
+  document.getElementById('backBtn').disabled = histIdx <= 0;
+  document.getElementById('fwdBtn').disabled  = histIdx >= hist.length - 1;
+}
+
+async function navTo(url, push) {
+  if (!url) return;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+  if (push) {
+    if (histIdx < hist.length - 1) hist.splice(histIdx + 1);
+    hist.push(url); histIdx = hist.length - 1;
+  }
+  setAddr(url); updateNavBtns();
+  prog(15); veil(true, 'FETCHING PAGE...', url);
+  show('emptyState', false); show('errState', false);
+  spin(true); setRelBtn(true);
+
+  let resp;
+  try { resp = await send({ type: 'page', url, options: opts }); }
+  catch (e) { done(); showErr('Connection Error', e.message); return; }
+
+  if (resp.type === 'error') { done(); showErr('Proxy Error', resp.message); return; }
+
+  if (resp.url && resp.url !== url) {
+    setAddr(resp.url);
+    if (push && hist.length > 0) hist[histIdx] = resp.url;
+  }
+
+  prog(35); veil(true, 'EMBEDDING ASSETS...', resp.url || url);
+  await renderPage(resp.body, resp.url || url);
+  done();
+  document.getElementById('statsBar').classList.add('show');
+}
+
+function done() { prog(100); spin(false); setRelBtn(false); veil(false); }
+
+function setAddr(url) {
+  activeUrl = url;
+  document.getElementById('addrIn').value = url;
+  document.getElementById('addrSec').textContent = url.startsWith('https://') ? '🔒' : '⚠️';
+  document.getElementById('pageTitle').textContent = '';
+}
+function showErr(title, msg) {
+  document.getElementById('errTitle').textContent = title;
+  document.getElementById('errMsg').textContent = msg;
+  document.getElementById('viewer').style.display = 'none';
+  show('errState', true);
+}
+
+/* ── Page rendering ────────────────────────────────────────────────────── */
+async function renderPage(html, baseUrl) {
+  html = await embedAssets(html);
+  const blob = new Blob([html], { type: 'text/html' });
+  const blobUrl = URL.createObjectURL(blob);
+  const v = document.getElementById('viewer');
+  v.onload = () => { URL.revokeObjectURL(blobUrl); prog(100); };
+  v.src = blobUrl;
+  v.style.display = 'block';
+  show('emptyState', false);
+}
+
+async function embedAssets(html) {
+  // Collect all assets to fetch
+  const queue = new Map();
+  for (const [,u] of html.matchAll(/data-wsrc="([^"]+)"/g))  queue.set(u, 'src');
+  for (const [,u] of html.matchAll(/data-whref="([^"]+)"/g)) queue.set(u, 'href');
+
+  if (!queue.size) return html;
+  const urls = [...queue.keys()];
+  veil(true, `LOADING ${urls.length} ASSETS...`);
+  prog(55);
+
+  const resolved = {};
+  // Batch in groups of 12 to avoid overwhelming the WS
+  const BATCH = 12;
+  for (let i = 0; i < urls.length; i += BATCH) {
+    const batch = urls.slice(i, i + BATCH);
+    await Promise.allSettled(batch.map(async url => {
+      try {
+        const res = await send({ type: 'resource', url, options: opts });
+        if (!res.body || res.blocked) return;
+        if (res.encoding === 'base64') {
+          resolved[url] = `data:${(res.contentType||'application/octet-stream').split(';')[0]};base64,${res.body}`;
+        } else {
+          // For CSS: return as blob URL so relative urls within it still resolve
+          const mime = (res.contentType||'text/plain').split(';')[0];
+          resolved[url] = URL.createObjectURL(new Blob([res.body], { type: mime }));
+        }
+      } catch {}
+    }));
+    prog(55 + Math.round(40 * (i + BATCH) / urls.length));
+  }
+
+  html = html.replace(/data-wsrc="([^"]+)"\s*src=""/g,  (m,u) => resolved[u] ? `src="${resolved[u]}"` : `src="${u}"`);
+  html = html.replace(/data-whref="([^"]+)"\s*href=""/g, (m,u) => resolved[u] ? `href="${resolved[u]}"` : `href="${u}"`);
+  return html;
+}
+
+/* ── Messages from iframe ──────────────────────────────────────────────── */
+window.addEventListener('message', async e => {
+  const d = e.data; if (!d) return;
+
+  if (d.type === 'ws-navigate') { navTo(d.url, true); return; }
+
+  if (d.type === 'ws-urlupdate') {
+    setAddr(d.url);
+    if (hist[histIdx] !== d.url) {
+      if (histIdx < hist.length - 1) hist.splice(histIdx + 1);
+      hist.push(d.url); histIdx = hist.length - 1;
+      updateNavBtns();
+    }
+    return;
+  }
+
+  if (d.type === 'ws-title') {
+    if (d.title) { document.getElementById('pageTitle').textContent = d.title; document.title = d.title + ' — GhostProxy'; }
+    return;
+  }
+  if (d.type === 'ws-loaded') { prog(100); return; }
+
+  if (d.type === 'ws-api') {
+    const { id, opts: o } = d;
+    try {
+      const r = await send({ type: 'api', url: o.url, method: o.method||'GET', headers: o.headers||{}, body: o.body||null, options: opts });
+      const v = document.getElementById('viewer');
+      if (v.contentWindow) v.contentWindow.postMessage({ type:'ws-api-response', id, status:r.status, contentType:r.contentType, resHeaders:r.resHeaders||{}, body:r.body||'', encoding:r.encoding||'utf8' }, '*');
+    } catch (err) {
+      const v = document.getElementById('viewer');
+      if (v.contentWindow) v.contentWindow.postMessage({ type:'ws-api-error', id, message:err.message }, '*');
+    }
+    return;
+  }
+});
+
+/* ── Iframe escape detection ─────────────────────────────────────────────
+   If the injected script fails to catch a navigation (shouldn't happen
+   with 5 layers of intercept, but just in case), we catch it here.     */
+(function() {
+  const v = document.getElementById('viewer');
+  v.addEventListener('load', () => {
+    try {
+      const href = v.contentWindow.location.href;
+      // blob: means we set it — fine. anything else = escaped.
+      if (href && !href.startsWith('blob:') && href !== 'about:blank') {
+        console.warn('[GP] iframe escaped to', href, '— re-proxying');
+        navTo(href, true);
+      }
+    } catch (e) {
+      // SecurityError = cross-origin navigation = escaped to real URL
+      // We can't read location.href — just reload current URL as fallback
+      if (activeUrl) navTo(activeUrl, false);
+    }
+  });
+})();
+
+/* ── UI helpers ────────────────────────────────────────────────────────── */
+function show(id, on) { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; }
+function veil(on, lbl, url) {
+  document.getElementById('load-veil').classList.toggle('on', on);
+  if (lbl) document.getElementById('loadLbl').textContent = lbl;
+  if (url !== undefined) document.getElementById('loadUrl2').textContent = (url||'').replace(/^https?:\/\//,'').slice(0,50);
+}
+function spin(on) { document.getElementById('addrSpin').classList.toggle('on', on); }
+function setRelBtn(loading) {
+  const b = document.getElementById('relBtn');
+  b.textContent = loading ? '✕' : '↺';
+  b.title = loading ? 'Stop' : 'Reload';
+  if (loading) b.onclick = () => {};
+  else         b.onclick = reload;
+}
+function prog(pct, instant) {
+  const b = document.getElementById('prog');
+  b.style.transition = instant ? 'none' : 'transform .3s ease,opacity .3s ease';
+  b.style.transform = `scaleX(${pct/100})`;
+  b.style.opacity = (pct <= 0 || pct >= 100) ? '0' : '1';
+  if (_progT) clearTimeout(_progT);
+  if (pct >= 100) _progT = setTimeout(() => prog(0, true), 350);
+}
+function toggleOpts() {
+  optsOpen = !optsOpen;
+  document.getElementById('optsPanel').classList.toggle('open', optsOpen);
+  document.getElementById('optsBtn').classList.toggle('lit', optsOpen);
+}
+function toggleNet() {
+  netOpen = !netOpen;
+  document.getElementById('net-panel').classList.toggle('open', netOpen);
+  document.getElementById('netBtn').classList.toggle('lit', netOpen);
+}
+function toast(msg, icon) {
+  const c = document.getElementById('toasts');
+  const el = document.createElement('div'); el.className = 'toast';
+  el.innerHTML = `${icon||'ℹ️'} ${msg}`;
+  c.appendChild(el); setTimeout(() => el.remove(), 2800);
+}
+
+/* ── Keyboard ──────────────────────────────────────────────────────────── */
+document.getElementById('landUrl').addEventListener('keydown', e => { if (e.key === 'Enter') landGo(); });
+document.getElementById('addrIn').addEventListener('keydown',  e => { if (e.key === 'Enter') addrGo(); });
+document.addEventListener('keydown', e => {
+  if (e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); goBack(); }
+  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goFwd(); }
+  if ((e.ctrlKey||e.metaKey) && e.key === 'l') { e.preventDefault(); document.getElementById('addrIn').focus(); document.getElementById('addrIn').select(); }
+});
+
+/* ── Init ──────────────────────────────────────────────────────────────── */
+show('emptyState', true);
+connect();
+</script>
+</body>
+</html>
