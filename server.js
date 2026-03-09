@@ -477,4 +477,4 @@ async function handleMsg(ws, msg) {
   }
 }
 
-srv.listen(PORT, () => console.log(`\n👻 GhostProxy  ws://localhost:${PORT}\n   Open client.html in your browser\n`));
+srv.listen(PORT, () => console.log(`\n👻 AH-Pro  ws://localhost:${PORT}\n   Open client.html in your browser\n`));
