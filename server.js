@@ -411,7 +411,7 @@ if(document.readyState!=='loading'){
 }
 
 // ── WebSocket server ───────────────────────────────────────────────────────────
-const srv = http.createServer((req, res) => { res.writeHead(200); res.end('GhostProxy WS server'); });
+const srv = http.createServer((req, res) => { res.writeHead(200); res.end('AH-Pro WS server'); });
 const wss = new WebSocket.Server({ server: srv });
 
 wss.on('connection', ws => {
